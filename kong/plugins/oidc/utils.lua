@@ -96,4 +96,24 @@ function M.has_bearer_access_token()
   return false
 end
 
+function M.get_iss_from_bearer_access_token()
+  local header = ngx.req.get_headers()['Authorization']
+  if header then
+    local token  = header:sub(header:find(' ') + 1)
+    local r_jwt = require("resty.jwt")
+    local jwt = r_jwt:load_jwt(token, "none")
+    if jwt.valid then
+      return jwt.payload.iss
+    end
+  end
+  return ""
+end
+
+function M.clone(obj)
+  if type(obj) ~= 'table' then return obj end
+  local res = {}
+  for k, v in pairs(obj) do res[M.clone(k)] = M.clone(v) end
+  return res
+end
+
 return M

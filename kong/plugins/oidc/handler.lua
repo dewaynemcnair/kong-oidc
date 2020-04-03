@@ -6,7 +6,6 @@ local session = require("kong.plugins.oidc.session")
 
 OidcHandler.PRIORITY = 1000
 
-
 function OidcHandler:new()
   OidcHandler.super.new(self, "oidc")
 end
@@ -65,16 +64,23 @@ end
 
 function introspect(oidcConfig)
   if utils.has_bearer_access_token() or oidcConfig.bearer_only == "yes" then
-    local res, err = require("resty.openidc").introspect(oidcConfig)
-    if err then
-      if oidcConfig.bearer_only == "yes" then
-        ngx.header["WWW-Authenticate"] = 'Bearer realm="' .. oidcConfig.realm .. '",error="' .. err .. '"'
-        utils.exit(ngx.HTTP_UNAUTHORIZED, err, ngx.HTTP_UNAUTHORIZED)
+    local customConfig = utils.clone(oidcConfig)
+    local iss = utils.get_iss_from_bearer_access_token()
+    if iss then
+      customConfig.introspection_endpoint = iss .. oidcConfig.introspection_endpoint
+      ngx.log(ngx.DEBUG, "customConfig.introspection_endpoint = " .. customConfig.introspection_endpoint)
+
+      local res, err = require("resty.openidc").introspect(customConfig)
+      if err then
+        if oidcConfig.bearer_only == "yes" then
+          ngx.header["WWW-Authenticate"] = 'Bearer realm="' .. oidcConfig.realm .. '",error="' .. err .. '"'
+          utils.exit(ngx.HTTP_UNAUTHORIZED, err, ngx.HTTP_UNAUTHORIZED)
+        end
+        return nil
       end
-      return nil
+      ngx.log(ngx.DEBUG, "OidcHandler introspect succeeded, requested path: " .. ngx.var.request_uri)
+      return res
     end
-    ngx.log(ngx.DEBUG, "OidcHandler introspect succeeded, requested path: " .. ngx.var.request_uri)
-    return res
   end
   return nil
 end
